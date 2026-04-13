@@ -1,0 +1,17 @@
+version: "3"
+
+services:
+  namenode:
+    build: .
+    hostname: namenode
+    container_name: namenode
+    ports:
+      - "9870:9870"
+
+  datanode1:
+    build: .
+    hostname: datanode1
+
+  datanode2:
+    build: .
+    hostname: datanode2
