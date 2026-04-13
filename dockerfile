@@ -24,18 +24,18 @@ RUN useradd -ms /bin/bash hadoop
 RUN echo "hadoop:hadoop" | chpasswd
 RUN adduser hadoop sudo
 
+# Copier config Hadoop
+COPY config-hadoop/* $HADOOP_HOME/etc/hadoop/
+
+# Script de démarrage
+COPY start.sh /start.sh
+RUN chmod +x /start.sh
+
 USER hadoop
 WORKDIR /home/hadoop
 
 # SSH sans mot de passe
 RUN ssh-keygen -t rsa -P "" -f ~/.ssh/id_rsa && \
     cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
-
-# Copier config Hadoop
-COPY config/* $HADOOP_HOME/etc/hadoop/
-
-# Script de démarrage
-COPY start.sh /start.sh
-RUN chmod +x /start.sh
 
 CMD ["/start.sh"]
