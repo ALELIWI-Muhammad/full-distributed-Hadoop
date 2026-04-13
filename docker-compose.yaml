@@ -3,15 +3,27 @@ version: "3"
 services:
   namenode:
     build: .
-    hostname: namenode
     container_name: namenode
+    hostname: namenode
     ports:
       - "9870:9870"
+      - "8088:8088"
+    networks:
+      - hadoop
 
   datanode1:
     build: .
+    container_name: datanode1
     hostname: datanode1
+    networks:
+      - hadoop
 
   datanode2:
     build: .
+    container_name: datanode2
     hostname: datanode2
+    networks:
+      - hadoop
+
+networks:
+  hadoop:

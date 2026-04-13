@@ -15,7 +15,6 @@
 -->
 
 <!-- Put site-specific property overrides in this file. -->
-
 <configuration>
   <property>
     <name>dfs.replication</name>
@@ -24,11 +23,11 @@
 
   <property>
     <name>dfs.namenode.name.dir</name>
-    <value>file:///tmp/hadoop/namenode</value>
+    <value>/home/hadoop/hdfs/namenode</value>
   </property>
 
   <property>
     <name>dfs.datanode.data.dir</name>
-    <value>file:///tmp/hadoop/datanode</value>
+    <value>/home/hadoop/hdfs/datanode</value>
   </property>
 </configuration>

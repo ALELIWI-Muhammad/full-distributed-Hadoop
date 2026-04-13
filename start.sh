@@ -1,17 +1,25 @@
 #!/bin/bash
 
-# Start SSH
+# Démarrer SSH
 service ssh start
 
-# Format only first time
-if [ ! -d "/tmp/hadoop/namenode/current" ]; then
-    hdfs namenode -format
+# Détecter rôle
+if [ "$HOSTNAME" == "namenode" ]; then
+    echo "Formatting HDFS..."
+    $HADOOP_HOME/bin/hdfs namenode -format -force
+
+    echo "Starting HDFS..."
+    start-dfs.sh
+
+    echo "Starting YARN..."
+    start-yarn.sh
+
+    tail -f /dev/null
+
+else
+    echo "Starting DataNode..."
+    hdfs datanode &
+    yarn nodemanager &
+
+    tail -f /dev/null
 fi
-
-# Start HDFS
-start-dfs.sh
-
-# Start YARN
-start-yarn.sh
-
-tail -f /dev/null
