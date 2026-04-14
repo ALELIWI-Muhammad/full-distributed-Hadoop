@@ -24,6 +24,15 @@ RUN useradd -ms /bin/bash hadoop
 RUN echo "hadoop:hadoop" | chpasswd
 RUN adduser hadoop sudo
 
+# Pre-create directories with correct ownership
+RUN mkdir -p $HADOOP_HOME/logs && \
+    mkdir -p /run/sshd && \
+    chown -R hadoop:hadoop $HADOOP_HOME && \
+    chmod 755 /run/sshd
+
+# Allow hadoop user to start SSH without password
+RUN echo "hadoop ALL=(ALL) NOPASSWD: /etc/init.d/ssh" >> /etc/sudoers
+
 # Copier config Hadoop
 COPY config-hadoop/* $HADOOP_HOME/etc/hadoop/
 
