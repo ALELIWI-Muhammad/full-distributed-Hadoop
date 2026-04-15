@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Démarrer SSH
-sudo service ssh start
+sudo /etc/init.d/ssh start
 
 # Détecter rôle
 if [ "$HOSTNAME" == "namenode" ]; then
