@@ -4,6 +4,9 @@ FROM hadoop-preinstall:latest
 RUN apt-get update && apt-get install -y \
     curl \
     net-tools \
+    sudo \
+    openssh-server \
+    openssh-client \
     && apt-get clean
 
 # Variables Hadoop
@@ -40,11 +43,22 @@ COPY config-hadoop/* $HADOOP_HOME/etc/hadoop/
 COPY start.sh /start.sh
 RUN chmod +x /start.sh
 
+# Persist env vars for SSH sessions (Hadoop scripts source hadoop-env.sh)
+RUN echo "export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> /opt/hadoop/etc/hadoop/hadoop-env.sh && \
+    echo "export HADOOP_HOME=/opt/hadoop" >> /opt/hadoop/etc/hadoop/hadoop-env.sh && \
+    echo "export PATH=\$PATH:\$HADOOP_HOME/bin:\$HADOOP_HOME/sbin" >> /opt/hadoop/etc/hadoop/hadoop-env.sh
+
+# SSH configuration for hadoop user
+RUN mkdir -p /home/hadoop/.ssh && \
+    ssh-keygen -t rsa -P "" -f /home/hadoop/.ssh/id_rsa && \
+    cat /home/hadoop/.ssh/id_rsa.pub >> /home/hadoop/.ssh/authorized_keys && \
+    chmod 600 /home/hadoop/.ssh/authorized_keys && \
+    chown -R hadoop:hadoop /home/hadoop/.ssh && \
+    echo "export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64" >> /home/hadoop/.bashrc && \
+    echo "export HADOOP_HOME=/opt/hadoop" >> /home/hadoop/.bashrc && \
+    echo "export PATH=\$PATH:\$HADOOP_HOME/bin:\$HADOOP_HOME/sbin" >> /home/hadoop/.bashrc
+
 USER hadoop
 WORKDIR /home/hadoop
-
-# SSH sans mot de passe
-RUN ssh-keygen -t rsa -P "" -f ~/.ssh/id_rsa && \
-    cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
 
 CMD ["/start.sh"]
