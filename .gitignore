@@ -1,0 +1,5 @@
+# PostgreSQL JDBC driver — binary dependency, built into Docker image via COPY
+postgresql.jar
+
+# Temporary debug/log files
+*.log

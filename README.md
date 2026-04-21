@@ -1,29 +1,36 @@
-# Full Distributed Hadoop Cluster
+# Full Distributed Hadoop Cluster with Hive
 
-A fully distributed Apache Hadoop 3.3.6 cluster running on Docker with 1 NameNode and 2 DataNodes.
+A fully distributed Apache Hadoop 3.3.6 cluster running on Docker with 1 NameNode, 2 DataNodes, and Apache Hive 4.0.0 (Metastore + HiveServer2) backed by PostgreSQL.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────┐
-│              Docker Network: hadoop          │
-│                                             │
-│  ┌──────────┐   ┌──────────┐  ┌──────────┐ │
-│  │ namenode │   │datanode1 │  │datanode2 │ │
-│  │          │   │          │  │          │ │
-│  │ HDFS NN  │   │ HDFS DN  │  │ HDFS DN  │ │
-│  │ YARN RM  │   │ YARN NM  │  │ YARN NM  │ │
-│  └──────────┘   └──────────┘  └──────────┘ │
-│  ports: 9870                                │
-│          8088                               │
-└─────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                      Docker Network: hadoop                      │
+│                                                                  │
+│  ┌──────────┐   ┌──────────┐  ┌──────────┐                      │
+│  │ namenode │   │datanode1 │  │datanode2 │                      │
+│  │ HDFS NN  │   │ HDFS DN  │  │ HDFS DN  │                      │
+│  │ YARN RM  │   │ YARN NM  │  │ YARN NM  │                      │
+│  └──────────┘   └──────────┘  └──────────┘                      │
+│                                                                  │
+│  ┌──────────┐   ┌───────────────┐   ┌─────────────────────┐     │
+│  │ postgres │──▶│   metastore   │──▶│    hiveserver2      │     │
+│  │ (PG 15)  │   │ Hive 4.0.0   │   │    Hive 4.0.0       │     │
+│  │          │   │ port: 9083    │   │ port: 10000 (JDBC)  │     │
+│  └──────────┘   └───────────────┘   │ port: 10002 (Web UI)│     │
+│                                     └─────────────────────┘     │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-| Node      | Role                              |
-|-----------|-----------------------------------|
-| namenode  | NameNode + ResourceManager        |
-| datanode1 | DataNode + NodeManager            |
-| datanode2 | DataNode + NodeManager            |
+| Container    | Role                                        |
+|--------------|---------------------------------------------|
+| namenode     | HDFS NameNode + YARN ResourceManager        |
+| datanode1    | HDFS DataNode + YARN NodeManager            |
+| datanode2    | HDFS DataNode + YARN NodeManager            |
+| postgres     | PostgreSQL 15 — Hive Metastore backend      |
+| metastore    | Hive Standalone Metastore (Thrift :9083)    |
+| hiveserver2  | HiveServer2 (JDBC :10000, Web UI :10002)    |
 
 ---
 
@@ -31,98 +38,110 @@ A fully distributed Apache Hadoop 3.3.6 cluster running on Docker with 1 NameNod
 
 ```
 full-distributed-hadoop/
-├── Dockerfile                   # Image definition for all nodes
-├── docker-compose.yaml          # Cluster topology (1 NN + 2 DN)
-├── start.sh                     # Entrypoint: detects role and starts services
-└── config-hadoop/
-    ├── core-site.xml            # HDFS default filesystem
-    ├── hdfs-site.xml            # Replication factor, data/name dirs
-    ├── mapred-site.xml          # MapReduce framework + classpath
-    └── yarn-site.xml            # YARN services + env whitelist
+├── Dockerfile                   # Image for Hadoop nodes (namenode/datanodes)
+├── Dockerfile.hive              # Image for Hive containers (adds PostgreSQL JDBC driver)
+├── docker-compose.yaml          # Full cluster topology
+├── start.sh                     # Entrypoint: detects role and starts Hadoop services
+├── postgresql.jar               # PostgreSQL JDBC driver (not committed — see .gitignore)
+├── .gitignore
+├── config-hadoop/
+│   ├── core-site.xml            # HDFS default filesystem
+│   ├── hdfs-site.xml            # Replication factor, data/name dirs
+│   ├── mapred-site.xml          # MapReduce framework + classpath
+│   └── yarn-site.xml            # YARN services + env whitelist
+└── config-hive/
+    ├── hive-site.xml            # Hive config: HDFS, metastore URI, PostgreSQL, HS2
+    └── log4j2.properties        # Logging config for Hive containers
 ```
 
 ---
 
-## File Explanations
+## Prerequisites
 
-### `Dockerfile`
-Builds a single image used by all nodes. Key steps:
-- Installs OpenSSH, curl, net-tools, sudo
-- Extracts Hadoop 3.3.6 to `/opt/hadoop`
-- Creates a `hadoop` user with passwordless sudo for SSH
-- Generates SSH keys and sets up passwordless SSH
-- Exports `JAVA_HOME`, `HADOOP_HOME` into `hadoop-env.sh` and `.bashrc` so SSH sessions can find Java (required by `start-dfs.sh` / `start-yarn.sh`)
-
-### `docker-compose.yaml`
-Defines the 3-node cluster on a shared `hadoop` Docker network:
-- `namenode` — exposes port `9870` (HDFS UI) and `8088` (YARN UI)
-- `datanode1`, `datanode2` — no exposed ports, internal only
-
-### `start.sh`
-Entrypoint script that detects the container role via `$HOSTNAME`:
-- **namenode**: formats HDFS, starts `start-dfs.sh` and `start-yarn.sh`
-- **datanode**: starts `hdfs datanode` and `yarn nodemanager` directly
-
-### `config-hadoop/core-site.xml`
-Sets the default HDFS URI:
-```xml
-<property>
-  <name>fs.defaultFS</name>
-  <value>hdfs://namenode:9000</value>
-</property>
-```
-
-### `config-hadoop/hdfs-site.xml`
-- Replication factor: `2` (data is replicated on both datanodes)
-- NameNode metadata dir: `/home/hadoop/hdfs/namenode`
-- DataNode data dir: `/home/hadoop/hdfs/datanode`
-
-### `config-hadoop/mapred-site.xml`
-- Sets MapReduce to run on YARN (`mapreduce.framework.name=yarn`)
-- Injects `HADOOP_MAPRED_HOME` into AM, Map, and Reduce container environments so YARN containers can find the MapReduce JARs
-- Sets `mapreduce.application.classpath` explicitly for container classpath resolution
-
-### `config-hadoop/yarn-site.xml`
-- Enables `mapreduce_shuffle` auxiliary service (required for MapReduce)
-- Whitelists environment variables (`JAVA_HOME`, `HADOOP_MAPRED_HOME`, etc.) that NodeManager propagates to containers
-
----
-
-## Getting Started
-
-### Prerequisites
 - Docker Desktop installed and running
 - Base image `hadoop-preinstall:latest` available locally
-
-### Build and Start
-
-```bash
-docker-compose build
-docker-compose up -d
-```
-
-### Check Cluster Status
-
-```bash
-# Check all containers are running
-docker-compose ps
-
-# Check HDFS nodes
-docker exec -it namenode bash -c "hdfs dfsadmin -report"
-```
-
-### Web UIs
-
-| UI              | URL                      |
-|-----------------|--------------------------|
-| HDFS NameNode   | http://localhost:9870    |
-| YARN ResourceManager | http://localhost:8088 |
+- Internet access to pull `apache/hive:4.0.0` and `postgres:15` from Docker Hub
 
 ---
 
-## Testing the Cluster — WordCount Example
+## First-Time Setup
 
-WordCount is the standard MapReduce sample included with Hadoop.
+### 1. Download the PostgreSQL JDBC driver
+
+The `apache/hive:4.0.0` image does not bundle the PostgreSQL driver. Download it once to the project root:
+
+```bash
+# PowerShell
+Invoke-WebRequest -Uri "https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.3/postgresql-42.7.3.jar" -OutFile "postgresql.jar"
+
+# or curl (Linux/Mac)
+curl -O https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.3/postgresql-42.7.3.jar -o postgresql.jar
+```
+
+### 2. Build and start the cluster
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+Startup order is managed automatically via healthchecks:
+`postgres` (healthy) → `metastore` (healthy, ~60s) → `hiveserver2`
+
+### 3. Create HDFS directories for Hive
+
+Run these once after the namenode is up (from inside the namenode container to avoid path issues on Windows):
+
+```bash
+docker exec -it namenode bash
+```
+
+Then inside:
+
+```bash
+hdfs dfs -mkdir -p /user/hive/warehouse
+hdfs dfs -mkdir -p /tmp/hive
+hdfs dfs -chmod -R 777 /user/hive
+hdfs dfs -chmod -R 777 /tmp/hive
+hdfs dfs -chown -R hive /user/hive
+exit
+```
+
+---
+
+## Web UIs
+
+| UI                        | URL                        |
+|---------------------------|----------------------------|
+| HDFS NameNode             | http://localhost:9870      |
+| YARN ResourceManager      | http://localhost:8088      |
+| HiveServer2               | http://localhost:10002     |
+
+---
+
+## Connecting to Hive
+
+### Beeline (inside the container)
+
+```bash
+docker exec -it hiveserver2 beeline -u 'jdbc:hive2://hiveserver2:10000/'
+```
+
+### Basic HiveQL commands
+
+```sql
+SHOW DATABASES;
+CREATE DATABASE test;
+USE test;
+CREATE TABLE employees (id INT, name STRING, salary DOUBLE)
+    ROW FORMAT DELIMITED FIELDS TERMINATED BY ',';
+SHOW TABLES;
+!quit
+```
+
+---
+
+## Testing the Cluster — WordCount (MapReduce)
 
 ### 1. Enter the NameNode
 
@@ -133,13 +152,8 @@ docker exec -it namenode bash
 ### 2. Create input data and upload to HDFS
 
 ```bash
-# Create a local text file
 echo "hello world hello hadoop world hadoop hadoop" > /tmp/input.txt
-
-# Create input directory on HDFS
 hdfs dfs -mkdir -p /user/hadoop/input
-
-# Upload the file
 hdfs dfs -put /tmp/input.txt /user/hadoop/input/
 ```
 
@@ -163,7 +177,7 @@ hello   2
 world   2
 ```
 
-### 5. Clean up (to re-run)
+### 5. Clean up
 
 ```bash
 hdfs dfs -rm -r /user/hadoop/output
@@ -174,5 +188,9 @@ hdfs dfs -rm -r /user/hadoop/output
 ## Stopping the Cluster
 
 ```bash
-docker-compose down
+# Stop containers (preserves volumes)
+docker compose down
+
+# Stop and remove all data volumes (full reset)
+docker compose down -v
 ```
