@@ -1,0 +1,8 @@
+FROM apache/hive:4.0.0
+
+# Copy the PostgreSQL JDBC driver into Hive's lib directory.
+# The apache/hive image does not bundle it — required for PostgreSQL metastore.
+USER root
+COPY postgresql.jar /opt/hive/lib/postgresql.jar
+
+USER hive
