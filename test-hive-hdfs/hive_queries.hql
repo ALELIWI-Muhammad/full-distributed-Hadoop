@@ -87,3 +87,17 @@ SELECT * FROM high_earners;
 
 -- ── 7. Verify HDFS location of the managed table ─────────────────────────────
 DESCRIBE FORMATTED high_earners;
+
+
+-- ── 8. Drop external tables (HDFS data is preserved) ─────────────────────────
+-- Dropping an EXTERNAL table only removes the metadata from the metastore.
+-- The CSV files in /data/employees/ and /data/departments/ remain intact.
+-- Note: high_earners (managed table) is intentionally NOT dropped here.
+
+USE company;
+
+DROP TABLE IF EXISTS employees;
+DROP TABLE IF EXISTS departments;
+
+-- Verify the tables are gone (high_earners should still appear)
+SHOW TABLES;
