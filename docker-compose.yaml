@@ -1,25 +1,57 @@
 services:
+
+  # ── Hadoop NameNode + ResourceManager ───────────────────────────────────────
   namenode:
-    build: .
+    build:
+      context: .
+      dockerfile: dockerfile
     container_name: namenode
     hostname: namenode
     ports:
-      - "9870:9870"
-      - "8088:8088"
+      - "9870:9870"   # HDFS Web UI
+      - "8088:8088"   # YARN ResourceManager Web UI
+      - "9000:9000"   # HDFS RPC
+      - "8032:8032"   # YARN ResourceManager RPC
+      - "8030:8030"   # YARN Scheduler
+      - "8031:8031"   # YARN Resource Tracker
     networks:
       - hadoop
 
+  # ── Hadoop DataNode 1 + NodeManager ─────────────────────────────────────────
   datanode1:
-    build: .
+    build:
+      context: .
+      dockerfile: dockerfile
     container_name: datanode1
     hostname: datanode1
     networks:
       - hadoop
 
+  # ── Hadoop DataNode 2 + NodeManager ─────────────────────────────────────────
   datanode2:
-    build: .
+    build:
+      context: .
+      dockerfile: dockerfile
     container_name: datanode2
     hostname: datanode2
+    networks:
+      - hadoop
+
+  # ── Spark client container ───────────────────────────────────────────────────
+  # Isolated Spark installation – submits jobs to YARN on the Hadoop cluster.
+  # No Hadoop daemons run here; it is a pure Spark client / driver node.
+  spark:
+    build:
+      context: ..          # workspace root so COPY can reach downloads/
+      dockerfile: full-distributed-hadoop/Dockerfile.spark
+    container_name: spark
+    hostname: spark
+    depends_on:
+      - namenode
+      - datanode1
+      - datanode2
+    ports:
+      - "4040:4040"   # Spark Application Web UI (driver)
     networks:
       - hadoop
 

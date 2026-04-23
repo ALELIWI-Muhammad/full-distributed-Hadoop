@@ -1,0 +1,6 @@
+# Job output logs
+output.txt
+*.log
+
+# Local temp files
+*.tmp
