@@ -91,7 +91,8 @@ You can also open the YARN UI at **http://localhost:8088**.
 
 > **Spark UI not loading (localhost:4040)?**
 >
-> The Spark driver runs inside the `spark` container and reports executor/task links
+> The Spark driver runs inside the `spark` container and reports executor/task links, or you run scala engine via spark-shell --master yarn --deploy-mode client
+but the url is still not working.
 > using the container hostnames (`namenode`, `datanode1`, etc.). Your browser can't
 > resolve those names unless you add them to your host machine's `hosts` file.
 >
