@@ -72,12 +72,14 @@ Wait ~20 seconds for HDFS to format, YARN to start, and user directories to be p
 ### Check Cluster Status
 
 ```bash
-# HDFS: should list namenode + 2 datanodes
-docker exec namenode bash -c "hdfs dfsadmin -report"
+# HDFS: should show namenode + 2 datanodes
+docker exec namenode hdfs dfsadmin -report
 
-# YARN: should list 2 NodeManagers
-docker exec namenode bash -c "yarn node -list"
+# YARN: should show 2 NodeManagers
+docker exec namenode yarn node -list
 ```
+
+You can also open the YARN UI at **http://localhost:8088**.
 
 ### Web UIs
 
@@ -86,6 +88,25 @@ docker exec namenode bash -c "yarn node -list"
 | HDFS NameNode         | http://localhost:9870  |
 | YARN ResourceManager  | http://localhost:8088  |
 | Spark App UI (driver) | http://localhost:4040  |
+
+> **Spark UI not loading (localhost:4040)?**
+>
+> The Spark driver runs inside the `spark` container and reports executor/task links
+> using the container hostnames (`namenode`, `datanode1`, etc.). Your browser can't
+> resolve those names unless you add them to your host machine's `hosts` file.
+>
+> **Windows** — edit `C:\Windows\System32\drivers\etc\hosts` as Administrator and add:
+>
+> ```
+> 127.0.0.1   namenode
+> 127.0.0.1   datanode1
+> 127.0.0.1   datanode2
+> 127.0.0.1   spark
+> ```
+>
+> **Linux / macOS** — edit `/etc/hosts` and add the same lines.
+>
+> After saving, refresh the browser. No restart of Docker or the cluster is needed.
 
 ---
 
@@ -172,11 +193,34 @@ spark-submit \
 
 ### Step 4 — Read the results
 
+> **Note:** `JavaWordCount` prints results to the driver logs (stdout), not to HDFS.
+> The output path passed to the job is not used by this particular example —
+> results appear directly in the terminal output of the `spark-submit` command above.
+
+To save only the program results to a local file (filtering out Spark/YARN log noise),
+run the job from your host terminal redirecting stderr away:
+
 ```bash
-hdfs dfs -cat /user/spark/wordcount/output/part-r-*
+docker exec spark bash -c "spark-submit \
+  --master yarn \
+  --deploy-mode client \
+  --class org.apache.spark.examples.JavaWordCount \
+  \$SPARK_HOME/examples/jars/spark-examples_2.12-3.5.0.jar \
+  hdfs://namenode:9000/user/spark/wordcount/input \
+  hdfs://namenode:9000/user/spark/wordcount/output" 2>&1 > output.txt
 ```
 
-Expected output:
+- `2>&1` merges stderr (Spark/YARN logs) into stdout
+- `> output.txt` saves everything to `output.txt` on your host machine
+- The WordCount results are visible inside that file, mixed with the logs
+
+To view just the result lines:
+
+```bash
+grep -E "^\([a-z]+,[0-9]+\)|^[a-z]+\s+[0-9]+$" output.txt
+```
+
+Expected output (visible in terminal or in `output.txt`):
 ```
 hadoop  2
 hello   2
@@ -186,7 +230,11 @@ world   2
 
 ### Step 5 — Clean up (to re-run)
 
+The output directory on HDFS must not exist before re-running. If you ran the job
+before, delete it first:
+
 ```bash
+# inside the spark container
 hdfs dfs -rm -r /user/spark/wordcount/output
 ```
 
