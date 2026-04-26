@@ -5,8 +5,13 @@ sudo /etc/init.d/ssh start
 
 # Détecter rôle
 if [ "$HOSTNAME" == "namenode" ]; then
-    echo "Formatting HDFS..."
-    $HADOOP_HOME/bin/hdfs namenode -format -force
+    # Only format on first boot (no existing namenode data)
+    if [ ! -d "/home/hadoop/hdfs/namenode/current" ]; then
+        echo "Formatting HDFS (first boot)..."
+        $HADOOP_HOME/bin/hdfs namenode -format -force
+    else
+        echo "HDFS already formatted, skipping format."
+    fi
 
     echo "Starting HDFS..."
     start-dfs.sh
