@@ -1,27 +1,147 @@
 services:
+
+  # ============================================
+  # KDC - Kerberos Key Distribution Center
+  # Must start first - all Hadoop nodes depend on it
+  # ============================================
+  kdc:
+    build:
+      context: .
+      dockerfile: dockerfile.kdc
+    container_name: kdc
+    hostname: kdc
+    networks:
+      hadoop:
+        ipv4_address: 172.20.0.10
+    volumes:
+      - kdc-data:/var/lib/krb5kdc
+      - keytabs:/keytabs
+    ports:
+      - "88:88/tcp"
+      - "88:88/udp"
+      - "749:749/tcp"
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "88"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ============================================
+  # NameNode - HDFS master + YARN ResourceManager
+  # ============================================
   namenode:
-    build: .
+    build:
+      context: .
+      dockerfile: dockerfile
     container_name: namenode
     hostname: namenode
+    depends_on:
+      kdc:
+        condition: service_healthy
     ports:
       - "9870:9870"
       - "8088:8088"
     networks:
-      - hadoop
+      hadoop:
+        ipv4_address: 172.20.0.11
+    volumes:
+      - namenode-data:/home/hadoop/hdfs/namenode
+      - keytabs:/keytabs:ro
+    environment:
+      - HADOOP_HOME=/opt/hadoop
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+      - KRB5_CONFIG=/etc/krb5.conf
+    # Override /etc/hosts so reverse DNS of each IP returns the short hostname.
+    # Without this, Java's InetAddress.getCanonicalHostName() returns the Docker
+    # internal FQDN (e.g. namenode.full-distributed-hadoop_hadoop) which breaks
+    # Kerberos principal matching against keytab entries.
+    extra_hosts:
+      - "namenode:172.20.0.11"
+      - "datanode1:172.20.0.12"
+      - "datanode2:172.20.0.13"
+      - "kdc:172.20.0.10"
 
+  # ============================================
+  # DataNode 1
+  # ============================================
   datanode1:
-    build: .
+    build:
+      context: .
+      dockerfile: dockerfile
     container_name: datanode1
     hostname: datanode1
+    depends_on:
+      kdc:
+        condition: service_healthy
+      namenode:
+        condition: service_started
     networks:
-      - hadoop
+      hadoop:
+        ipv4_address: 172.20.0.12
+    volumes:
+      - datanode1-data:/home/hadoop/hdfs/datanode
+      - keytabs:/keytabs:ro
+    environment:
+      - HADOOP_HOME=/opt/hadoop
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+      - KRB5_CONFIG=/etc/krb5.conf
+    extra_hosts:
+      - "namenode:172.20.0.11"
+      - "datanode1:172.20.0.12"
+      - "datanode2:172.20.0.13"
+      - "kdc:172.20.0.10"
 
+  # ============================================
+  # DataNode 2
+  # ============================================
   datanode2:
-    build: .
+    build:
+      context: .
+      dockerfile: dockerfile
     container_name: datanode2
     hostname: datanode2
+    depends_on:
+      kdc:
+        condition: service_healthy
+      namenode:
+        condition: service_started
     networks:
-      - hadoop
+      hadoop:
+        ipv4_address: 172.20.0.13
+    volumes:
+      - datanode2-data:/home/hadoop/hdfs/datanode
+      - keytabs:/keytabs:ro
+    environment:
+      - HADOOP_HOME=/opt/hadoop
+      - JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+      - KRB5_CONFIG=/etc/krb5.conf
+    extra_hosts:
+      - "namenode:172.20.0.11"
+      - "datanode1:172.20.0.12"
+      - "datanode2:172.20.0.13"
+      - "kdc:172.20.0.10"
 
+# ============================================
+# Persistent volumes
+# ============================================
+volumes:
+  kdc-data:
+    driver: local
+  keytabs:
+    driver: local
+  namenode-data:
+    driver: local
+  datanode1-data:
+    driver: local
+  datanode2-data:
+    driver: local
+
+# ============================================
+# Internal cluster network with fixed subnet
+# ============================================
 networks:
   hadoop:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/24
