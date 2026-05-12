@@ -1,23 +1,81 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
-<!--
-  Licensed under the Apache License, Version 2.0 (the "License");
-  you may not use this file except in compliance with the License.
-  You may obtain a copy of the License at
-
-    http://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License. See accompanying LICENSE file.
--->
-
-<!-- Put site-specific property overrides in this file. -->
 <configuration>
+
+  <!-- Default HDFS filesystem URI -->
   <property>
     <name>fs.defaultFS</name>
     <value>hdfs://namenode:9000</value>
   </property>
+
+  <!-- Enable Kerberos authentication for the entire cluster -->
+  <property>
+    <name>hadoop.security.authentication</name>
+    <value>kerberos</value>
+  </property>
+
+  <!-- Enable service-level authorization -->
+  <property>
+    <name>hadoop.security.authorization</name>
+    <value>true</value>
+  </property>
+
+  <!-- Path to the Kerberos client configuration file -->
+  <property>
+    <name>hadoop.security.krb5.conf</name>
+    <value>/etc/krb5.conf</value>
+  </property>
+
+  <!-- Kerberos realm -->
+  <property>
+    <name>hadoop.security.realm</name>
+    <value>HADOOP.LOCAL</value>
+  </property>
+
+  <!--
+    Use token service based on hostname, not IP address.
+    Combined with disabling canonical hostname lookup, this prevents
+    Docker's FQDN (e.g. namenode.project_network) from being used
+    in Kerberos principal matching.
+  -->
+  <property>
+    <name>hadoop.security.token.service.use_ip</name>
+    <value>false</value>
+  </property>
+
+  <!--
+    Disable canonical hostname lookup.
+    Without this, InetAddress.getCanonicalHostName() returns the Docker
+    internal FQDN (namenode.full-distributed-hadoop_hadoop) which breaks
+    Kerberos principal matching against keytab entries like yarn/namenode.
+  -->
+  <property>
+    <name>dfs.namenode.kerberos.principal.pattern</name>
+    <value>*</value>
+  </property>
+
+  <!--
+    Rules for mapping Kerberos principals to local Unix usernames.
+    Service principals (hdfs/, yarn/, HTTP/) are mapped to the 'hadoop' user,
+    including Docker FQDN variants like yarn/namenode.project_network.
+  -->
+  <property>
+    <name>hadoop.security.auth_to_local</name>
+    <value>
+      RULE:[2:$1/$2@$0]([ndh].*\/.*@HADOOP\.LOCAL)s/.*/hadoop/
+      RULE:[1:$1@$0](.*@HADOOP\.LOCAL)s/@.*//
+      DEFAULT
+    </value>
+  </property>
+
+  <!-- Allow the hadoop user to proxy other users -->
+  <property>
+    <name>hadoop.proxyuser.hadoop.hosts</name>
+    <value>*</value>
+  </property>
+  <property>
+    <name>hadoop.proxyuser.hadoop.groups</name>
+    <value>*</value>
+  </property>
+
 </configuration>
