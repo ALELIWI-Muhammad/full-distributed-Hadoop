@@ -1,0 +1,23 @@
+FROM debian:bullseye-slim
+
+# Installer le KDC Kerberos (MIT Kerberos)
+RUN apt-get update && apt-get install -y \
+    krb5-kdc \
+    krb5-admin-server \
+    krb5-config \
+    krb5-user \
+    netcat-openbsd \
+    && apt-get clean
+
+# Copier la configuration Kerberos
+COPY config-kerberos/krb5.conf /etc/krb5.conf
+COPY config-kerberos/kdc.conf /etc/krb5kdc/kdc.conf
+COPY config-kerberos/kadm5.acl /etc/krb5kdc/kadm5.acl
+
+# Script d'initialisation du KDC
+COPY config-kerberos/init-kdc.sh /init-kdc.sh
+RUN chmod +x /init-kdc.sh
+
+EXPOSE 88 749
+
+CMD ["/init-kdc.sh"]
